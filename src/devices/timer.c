@@ -20,6 +20,17 @@
 /** Number of timer ticks since OS booted. */
 static int64_t ticks;
 
+/** Sorted list of sleeping threads, ordered by assending wake_tick. */
+static struct list sleep_list;
+
+/** Comparator for sleep_list: returns true if thread A wakes up before thread B. */
+static bool
+wake_tick_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+  return list_entry (a, struct thread, elem)->wake_tick
+       < list_entry (b, struct thread, elem)->wake_tick;
+}
+
 /** Number of loops per timer tick.
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
@@ -37,6 +48,7 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  list_init (&sleep_list); /* Initialize the sleep queue for blocked threads. */
 }
 
 /** Calibrates loops_per_tick, used to implement brief delays. */
@@ -89,11 +101,18 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
-  int64_t start = timer_ticks ();
-
+  if (ticks <= 0)
+    return;
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  enum intr_level old_level = intr_disable ();
+
+  struct thread *cur = thread_current ();
+  cur->wake_tick = timer_ticks () + ticks;       /* Set absolute wake time. */
+  
+  list_insert_ordered (&sleep_list, &cur->elem, wake_tick_less, NULL);
+
+  thread_block ();                               /* Block until woken. */
+  intr_set_level (old_level);
 }
 
 /** Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -172,6 +191,15 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+  /* Wake up sleeping threads whose deadline has passed. */
+  while (!list_empty (&sleep_list))
+    {
+      struct thread *t = list_entry (list_front (&sleep_list), struct thread, elem);
+      if (t->wake_tick > ticks)
+        break;
+      list_pop_front (&sleep_list);
+      thread_unblock (t);                        /* Move thread back to ready. */
+    }
 }
 
 /** Returns true if LOOPS iterations waits for more than one timer

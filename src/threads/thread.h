@@ -89,6 +89,11 @@ struct thread
     uint8_t *stack;                     /**< Saved stack pointer. */
     int priority;                       /**< Priority. */
     struct list_elem allelem;           /**< List element for all threads list. */
+    int64_t wake_tick;                  /**< Tick when thread should wake up. */
+    int base_priority;                  /**< Original priority before donations. */
+    struct list donors;                 /**< Threads donating priority to this thread. */
+    struct list_elem donor_elem;        /**< List element for donors list. */
+    struct lock *waiting_for;           /**< Lock this thread is blocked on, or NULL. */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /**< List element. */
@@ -97,9 +102,8 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /**< Page directory. */
 #endif
-
-    /* Owned by thread.c. */
     unsigned magic;                     /**< Detects stack overflow. */
+
   };
 
 /** If false (default), use round-robin scheduler.
@@ -137,5 +141,14 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/* Function prototypes for priority comparisons. */
+bool thread_priority_greater (const struct list_elem *a, const struct list_elem *b, void *aux);
+bool thread_priority_greater_donor (const struct list_elem *a, const struct list_elem *b, void *aux);
+
+void thread_yield_if_not_highest (void);
+void thread_update_effective_priority (struct thread *t);  /* Recalculates effective priority from donors. */
+void thread_reinsert_ready (struct thread *t);
+void donate_priority (struct thread *t, struct lock *lock);
 
 #endif /**< threads/thread.h */
