@@ -213,7 +213,9 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  thread_yield();
+  if (t->priority > thread_current()->priority) {
+      thread_yield();
+  }
 
   return tid;
 }
@@ -350,18 +352,21 @@ thread_foreach (thread_action_func *func, void *aux)
 
 void donate_priority(struct thread *t, struct lock *lock) {
     int depth = 0;
-    struct lock *l = lock;
+    struct thread *cur = t;
 
     /* Follow the chain of locks: Thread A -> Lock 1 -> Thread B -> Lock 2... */
-    while (l != NULL && depth < 8) {
-        struct thread *holder = l->holder;
-        if (holder == NULL) break;
+    while (cur->waiting_for != NULL && depth < 8) {
+        struct thread *holder = cur->waiting_for->holder;
+        if (!holder) break;
 
-        thread_update_effective_priority(holder);
-
-        /* Move to the next link in the chain */
-        l = holder->waiting_for;
-        depth++;
+        if(holder->priority < cur->priority){
+          holder->priority = cur->priority;  /* Donate priority. */
+          cur = holder; 
+          depth++;
+        }
+        else {
+          break; /* No further donation needed. */
+        }
     }
 
     if(!list_empty(&ready_list)){
@@ -374,18 +379,11 @@ void donate_priority(struct thread *t, struct lock *lock) {
 void
 thread_set_priority (int new_priority) 
 {
-  enum intr_level old_level = intr_disable ();
   struct thread *cur = thread_current ();
 
-  if(cur->priority != cur->base_priority){
-    cur->priority = new_priority;                    /* Update current priority. */
-  }
-  else{
-    cur->priority = new_priority;                    /* Update current priority. */
-    cur->base_priority = new_priority;               /* Update base priority. */
-    }
+  cur->base_priority = new_priority;
+  cur->priority = thread_get_priority(); // Calculates max(base, donors)
 
-  intr_set_level (old_level);
   thread_yield_if_not_highest ();                /* Yield if no longer highest. */
 }
 
@@ -393,6 +391,8 @@ thread_set_priority (int new_priority)
 void
 thread_update_effective_priority (struct thread *t)
 {
+  t->priority = t->base_priority;  /* Start with base priority. */
+
   /* Check if any donor has a higher priority. */
   if (!list_empty (&t->donors)) 
     {
@@ -410,8 +410,10 @@ int
 thread_get_priority (void) 
 {
   struct thread *cur = thread_current ();
-  int max_priority = cur->priority;  /* Start with current priority. */
+  int max_priority = cur->base_priority;  /* Start with base priority. */
+
   if(!list_empty(&cur->donors)){
+    list_sort (&cur->donors, thread_priority_greater_donor, NULL);
     struct thread *top_donor = list_entry (list_front (&cur->donors), struct thread, donor_elem);
     if (top_donor->priority > max_priority) {
       max_priority = top_donor->priority;
@@ -664,17 +666,12 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 void
 thread_yield_if_not_highest (void) 
 {
-  /* If idle_thread isn't set yet, or we are the idle thread, do nothing. */
-  if (idle_thread == NULL || thread_current () == idle_thread)
-    return;
-
   if (!list_empty (&ready_list)) 
     {
-      struct thread *highest = list_entry (list_front (&ready_list), 
-                                          struct thread, elem);
+      struct thread *highest = list_entry (list_front (&ready_list), struct thread, elem);
       if (highest->priority > thread_current ()->priority)
         {
-            thread_yield ();
+          thread_yield ();
         }
     }
 }

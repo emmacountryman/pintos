@@ -195,14 +195,16 @@ timer_interrupt (struct intr_frame *args UNUSED)
   while (!list_empty (&sleep_list))
     {
       struct thread *t = list_entry (list_begin (&sleep_list), struct thread, elem);
-      if (t->wake_tick > ticks)
-        break;
-      list_pop_front (&sleep_list);
-      thread_unblock (t);                        /* Move thread back to ready. */
+      if (t->wake_tick <= ticks){
+        list_pop_front (&sleep_list);
+        thread_unblock (t);                        /* Move thread back to ready. */
 
-      if(t->priority > thread_current()->priority) {
-        intr_yield_on_return (); /* Preempt if the woken thread has higher priority. */
+        if(t->priority > thread_current()->priority) {
+          intr_yield_on_return (); /* Preempt if the woken thread has higher priority. */
+        }
       }
+      else
+        break;
     }
 }
 

@@ -204,10 +204,6 @@ void lock_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
 
   struct thread *cur = thread_current();
-  enum intr_level old_level;
-
-  /* 1. Ensure this entire priority logic block is atomic */
-  old_level = intr_disable ();
 
   if (lock->holder != NULL) 
   {
@@ -216,16 +212,12 @@ void lock_acquire (struct lock *lock)
     donate_priority (cur, lock);
   }
 
-  intr_set_level (old_level);
-
   /* 2. Now call sema_down. This will turn interrupts back on if it blocks */
   sema_down (&lock->semaphore); 
 
   /* 3. Re-enable protection while setting the holder */
-  old_level = intr_disable ();
   lock->holder = cur;
   cur->waiting_for = NULL; 
-  intr_set_level (old_level);
 }
 
 /** Tries to acquires LOCK and returns true if successful or false
