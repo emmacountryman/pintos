@@ -1,4 +1,3 @@
-//Emma's 13/18 code
 #include "devices/timer.h"
 #include <debug.h>
 #include <inttypes.h>

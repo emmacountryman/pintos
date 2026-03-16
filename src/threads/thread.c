@@ -1,4 +1,3 @@
-//Emma's 13/18 code
 #include "threads/thread.h"
 #include <debug.h>
 #include <stddef.h>
@@ -398,7 +397,7 @@ thread_update_effective_priority (struct thread *t)
   if (!list_empty (&t->donors)) 
     {
       list_sort (&t->donors, thread_priority_greater_donor, NULL);
-      struct thread *top_donor = list_entry (list_front (&t->donors), struct thread, donor_elem);
+      struct thread *top_donor = list_entry (list_begin(&t->donors), struct thread, donor_elem);
       if (top_donor->priority > t->priority)
         t->priority = top_donor->priority;
     }
@@ -415,7 +414,7 @@ thread_get_priority (void)
 
   if(!list_empty(&cur->donors)){
     list_sort (&cur->donors, thread_priority_greater_donor, NULL);
-    struct thread *top_donor = list_entry (list_front (&cur->donors), struct thread, donor_elem);
+    struct thread *top_donor = list_entry (list_begin(&cur->donors), struct thread, donor_elem);
     if (top_donor->priority > max_priority) {
       max_priority = top_donor->priority;
     }
@@ -669,7 +668,7 @@ thread_yield_if_not_highest (void)
 {
   if (!list_empty (&ready_list)) 
     {
-      struct thread *highest = list_entry (list_front (&ready_list), struct thread, elem);
+      struct thread *highest = list_entry (list_begin (&ready_list), struct thread, elem);
       if (highest->priority > thread_current ()->priority)
         {
           thread_yield ();

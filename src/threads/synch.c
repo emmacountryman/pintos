@@ -26,7 +26,6 @@
    MODIFICATIONS.
 */
 
-//Emma's 13/18 code
 
 #include "threads/synch.h"
 #include <stdio.h>
@@ -312,8 +311,8 @@ cond_sema_priority_greater (const struct list_elem *a, const struct list_elem *b
   struct semaphore_elem *sa = list_entry (a, struct semaphore_elem, elem);
   struct semaphore_elem *sb = list_entry (b, struct semaphore_elem, elem);
 
-  struct thread *t1 = list_entry(list_front(&sa->semaphore.waiters), struct thread, elem);
-  struct thread *t2 = list_entry(list_front(&sb->semaphore.waiters), struct thread, elem);
+  struct thread *t1 = list_entry(list_begin(&sa->semaphore.waiters), struct thread, elem);
+  struct thread *t2 = list_entry(list_begin(&sb->semaphore.waiters), struct thread, elem);
   
   /* Safely compare the threads that created these elements */
   return t1->priority > t2->priority;
@@ -375,12 +374,12 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
 
   if (!list_empty (&cond->waiters)) 
     {
-      enum intr_level old_level = intr_disable ();  /* Ensure atomicity of this block. */
+      enum intr_level old_level = intr_get_level();  /* Ensure atomicity of this block. */
+      intr_disable ();
       /* Sort by priority so highest-priority waiter is signaled first. */
       list_sort (&cond->waiters, cond_sema_priority_greater, NULL);
       intr_set_level (old_level);
-      sema_up (&list_entry (list_pop_front (&cond->waiters),
-                            struct semaphore_elem, elem)->semaphore);
+      sema_up (&list_entry (list_pop_front (&cond->waiters), struct semaphore_elem, elem)->semaphore);
     }
 }
 
