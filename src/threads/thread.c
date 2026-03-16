@@ -213,9 +213,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  /* Only preempt after the scheduler is fully running. */
-  if (idle_thread != NULL)
-    thread_yield_if_not_highest ();
+  thread_yield();
 
   return tid;
 }
@@ -359,10 +357,7 @@ void donate_priority(struct thread *t, struct lock *lock) {
         struct thread *holder = l->holder;
         if (holder == NULL) break;
 
-        /* If the donor's priority is higher, donate it */
-        if (holder->priority < t->priority) {
-            holder->priority = t->priority;
-        } 
+        thread_update_effective_priority(holder);
 
         /* Move to the next link in the chain */
         l = holder->waiting_for;
@@ -381,15 +376,14 @@ thread_set_priority (int new_priority)
 {
   enum intr_level old_level = intr_disable ();
   struct thread *cur = thread_current ();
-  cur->base_priority = new_priority;             /* Update base priority. */
 
-  if(!list_empty (&cur->donors)) {
-    struct thread *top_donor = list_entry (list_front (&cur->donors), struct thread, donor_elem);
-
-    if(top_donor->priority > new_priority){
-      cur->priority = top_donor->priority;
-    }
+  if(cur->priority != cur->base_priority){
+    cur->priority = new_priority;                    /* Update current priority. */
   }
+  else{
+    cur->priority = new_priority;                    /* Update current priority. */
+    cur->base_priority = new_priority;               /* Update base priority. */
+    }
 
   intr_set_level (old_level);
   thread_yield_if_not_highest ();                /* Yield if no longer highest. */
@@ -399,19 +393,16 @@ thread_set_priority (int new_priority)
 void
 thread_update_effective_priority (struct thread *t)
 {
-  /* Start with base priority. */
-  t->priority = t->base_priority;
   /* Check if any donor has a higher priority. */
   if (!list_empty (&t->donors)) 
     {
       list_sort (&t->donors, thread_priority_greater_donor, NULL);
-      struct thread *top_donor = list_entry (list_front (&t->donors),
-                                             struct thread, donor_elem);
+      struct thread *top_donor = list_entry (list_front (&t->donors), struct thread, donor_elem);
       if (top_donor->priority > t->priority)
         t->priority = top_donor->priority;
     }
+  
 }
-
 
 
 /** Returns the current thread's priority. */
@@ -683,9 +674,6 @@ thread_yield_if_not_highest (void)
                                           struct thread, elem);
       if (highest->priority > thread_current ()->priority)
         {
-          if (intr_context ())
-            intr_yield_on_return ();
-          else
             thread_yield ();
         }
     }

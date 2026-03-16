@@ -110,16 +110,13 @@ sema_up (struct semaphore *sema)
   enum intr_level old_level;
   ASSERT (sema != NULL);
   old_level = intr_disable ();
-
-  /* 1. Increment the value FIRST so the waking thread sees it is available */
-  sema->value++;
-
-  /* 2. Unblock the highest priority thread */
+  
   if (!list_empty (&sema->waiters)) 
     {
       list_sort (&sema->waiters, thread_priority_greater, NULL);
       thread_unblock (list_entry (list_pop_front (&sema->waiters), struct thread, elem));
     }
+  sema->value++;
 
   /* (You don't need the manual thread_yield_if_not_highest() here anymore 
       because your thread_unblock already handles it perfectly!) */
@@ -263,9 +260,7 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   struct thread *cur = thread_current ();
-  lock->holder = NULL;                                /* Release the lock. */
 
-  
   if(!list_empty(&cur->donors)){
     /* Remove all donors that were waiting on this specific lock. */
     struct list_elem *e = list_begin (&cur->donors);
@@ -280,8 +275,9 @@ lock_release (struct lock *lock)
   }
 
   /* Recalculate effective priority from remaining donors. */
-  cur->priority = thread_get_priority ();  /* This will consider remaining donors. */
+  cur->priority = thread_get_priority ();  /* Start with base priority. */
 
+  lock->holder = NULL;                              
   sema_up (&lock->semaphore);
 }
 
